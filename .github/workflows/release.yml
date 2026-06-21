@@ -17,9 +17,6 @@ jobs:
           - os: macos-latest
             target: aarch64-apple-darwin
             label: macOS Apple Silicon
-          - os: macos-13
-            target: x86_64-apple-darwin
-            label: macOS Intel
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             label: Windows x64
@@ -64,7 +61,6 @@ jobs:
             | Plataforma | Archivo |
             |------------|---------|
             | macOS Apple Silicon (M1/M2/M3) | `FocusGuard_*_aarch64.dmg` |
-            | macOS Intel | `FocusGuard_*_x64.dmg` |
             | Windows 10/11 | `FocusGuard_*_x64-setup.exe` |
 
             ### Instalación
