@@ -1,6 +1,9 @@
 use std::collections::HashSet;
 use std::sync::Mutex;
-use tauri::{AppHandle, Manager, State};
+use tauri::{
+    tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent},
+    AppHandle, Manager, State, Wry,
+};
 use tauri_plugin_notification::NotificationExt;
 
 mod blocker;
@@ -14,6 +17,8 @@ pub struct AppState {
     /// IDs de plataformas bloqueadas en el último tick del scheduler, para
     /// notificar solo las que acaban de pasar de desbloqueada a bloqueada.
     pub previously_blocked: Mutex<HashSet<i64>>,
+    /// Ícono de bandeja: solo se muestra mientras algo esté bloqueado.
+    pub tray: Mutex<Option<TrayIcon<Wry>>>,
 }
 
 // ─── Plataformas ──────────────────────────────────────────────────────────────
@@ -233,6 +238,13 @@ pub fn refresh_blocks(state: &State<AppState>) -> Result<(), String> {
     }
 
     drop(conn);
+
+    if let Ok(tray) = state.tray.lock() {
+        if let Some(tray) = tray.as_ref() {
+            let _ = tray.set_visible(!domains_to_block.is_empty());
+        }
+    }
+
     blocker::apply_blocks(&domains_to_block)
 }
 
@@ -275,6 +287,7 @@ pub fn run() {
     let app_state = AppState {
         db: Mutex::new(conn),
         previously_blocked: Mutex::new(HashSet::new()),
+        tray: Mutex::new(None),
     };
 
     tauri::Builder::default()
@@ -301,6 +314,32 @@ pub fn run() {
             // la app, para que las notificaciones de bloqueo funcionen sin
             // tocar nada desde el frontend.
             let _ = app.notification().request_permission();
+
+            if let Some(icon) = app.default_window_icon().cloned() {
+                let tray = TrayIconBuilder::new()
+                    .icon(icon)
+                    .tooltip("FocusGuard está activo")
+                    .on_tray_icon_event(|tray, event| {
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        } = event
+                        {
+                            if let Some(window) = tray.app_handle().get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.unminimize();
+                                let _ = window.set_focus();
+                            }
+                        }
+                    })
+                    .build(app)?;
+
+                // Arranca oculto: solo debe verse mientras haya algo bloqueado
+                // de verdad. refresh_blocks() lo muestra/oculta según toque.
+                let _ = tray.set_visible(false);
+                *app.state::<AppState>().tray.lock().unwrap() = Some(tray);
+            }
 
             let handle = app.handle().clone();
             scheduler::run_scheduler(handle);
