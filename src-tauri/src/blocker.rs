@@ -6,6 +6,18 @@ const SUDOERS_PATH: &str = "/etc/sudoers.d/focusguard";
 
 pub fn apply_blocks(domains: &[String]) -> Result<(), String> {
     let new_content = build_hosts_content(domains)?;
+
+    // El scheduler llama apply_blocks cada 60s sin importar si algo cambió.
+    // Sin esta comparación, cada llamada reescribe el hosts y en Windows eso
+    // dispara un prompt de UAC nuevo cada minuto (en macOS, un prompt de
+    // contraseña si el helper no está instalado). Si el contenido resultante
+    // es idéntico al que ya está en el hosts, no hay nada que aplicar.
+    if let Ok(current) = read_hosts() {
+        if current == new_content {
+            return Ok(());
+        }
+    }
+
     write_hosts(new_content)
 }
 

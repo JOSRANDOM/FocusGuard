@@ -47,6 +47,9 @@ pub fn run_scheduler(app: AppHandle) {
     std::thread::spawn(move || loop {
         std::thread::sleep(std::time::Duration::from_secs(60));
         let state = app.state::<AppState>();
+        if let Err(e) = crate::notify_new_blocks(&app, &state) {
+            eprintln!("[FocusGuard scheduler] Error notificando: {}", e);
+        }
         if let Err(e) = crate::refresh_blocks(&state) {
             eprintln!("[FocusGuard scheduler] Error: {}", e);
         }

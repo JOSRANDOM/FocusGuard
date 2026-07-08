@@ -1,5 +1,7 @@
+use std::collections::HashSet;
 use std::sync::Mutex;
-use tauri::{Manager, State};
+use tauri::{AppHandle, Manager, State};
+use tauri_plugin_notification::NotificationExt;
 
 mod blocker;
 mod db;
@@ -9,6 +11,9 @@ pub use db::{GlobalSchedule, NewGlobalSchedule, NewSchedule, Platform, Schedule}
 
 pub struct AppState {
     pub db: Mutex<rusqlite::Connection>,
+    /// IDs de plataformas bloqueadas en el último tick del scheduler, para
+    /// notificar solo las que acaban de pasar de desbloqueada a bloqueada.
+    pub previously_blocked: Mutex<HashSet<i64>>,
 }
 
 // ─── Plataformas ──────────────────────────────────────────────────────────────
@@ -143,6 +148,60 @@ fn apply_blocks_now(state: State<AppState>) -> Result<Vec<String>, String> {
     Ok(blocked)
 }
 
+/// Compara qué plataformas están bloqueadas ahora contra el último tick del
+/// scheduler y envía una notificación nativa solo por las que acaban de pasar
+/// de desbloqueada a bloqueada (evita notificar de nuevo cada 60s mientras
+/// una plataforma sigue bloqueada).
+pub fn notify_new_blocks(app: &AppHandle, state: &State<AppState>) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let platforms = db::get_platforms(&conn).map_err(|e| e.to_string())?;
+    let global = db::get_global_schedules(&conn).map_err(|e| e.to_string())?;
+    let globally_blocked = scheduler::is_globally_blocked(&global);
+
+    let mut currently_blocked_ids = HashSet::new();
+
+    for p in &platforms {
+        if !p.enabled {
+            continue;
+        }
+        let is_blocked = if globally_blocked {
+            true
+        } else {
+            let schedules = db::get_schedules(&conn, p.id).map_err(|e| e.to_string())?;
+            scheduler::should_block(&schedules)
+        };
+        if is_blocked {
+            currently_blocked_ids.insert(p.id);
+        }
+    }
+    drop(conn);
+
+    let mut prev = state.previously_blocked.lock().map_err(|e| e.to_string())?;
+    let newly_blocked: Vec<String> = platforms
+        .iter()
+        .filter(|p| currently_blocked_ids.contains(&p.id) && !prev.contains(&p.id))
+        .map(|p| p.name.clone())
+        .collect();
+    *prev = currently_blocked_ids;
+    drop(prev);
+
+    if !newly_blocked.is_empty() {
+        let body = if newly_blocked.len() == 1 {
+            format!("{} está bloqueado ahora.", newly_blocked[0])
+        } else {
+            format!("{} están bloqueados ahora.", newly_blocked.join(", "))
+        };
+        let _ = app
+            .notification()
+            .builder()
+            .title("🛡️ FocusGuard")
+            .body(body)
+            .show();
+    }
+
+    Ok(())
+}
+
 pub fn refresh_blocks(state: &State<AppState>) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     let platforms = db::get_platforms(&conn).map_err(|e| e.to_string())?;
@@ -215,10 +274,12 @@ pub fn run() {
     let conn = db::init_db().expect("Error iniciando la base de datos");
     let app_state = AppState {
         db: Mutex::new(conn),
+        previously_blocked: Mutex::new(HashSet::new()),
     };
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             get_platforms,
@@ -235,6 +296,12 @@ pub fn run() {
             install_helper,
         ])
         .setup(|app| {
+            // En Windows esto es prácticamente un no-op; en macOS dispara el
+            // diálogo de permiso de notificaciones la primera vez que corre
+            // la app, para que las notificaciones de bloqueo funcionen sin
+            // tocar nada desde el frontend.
+            let _ = app.notification().request_permission();
+
             let handle = app.handle().clone();
             scheduler::run_scheduler(handle);
             Ok(())
