@@ -71,3 +71,19 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: --target ${{ matrix.target }}
+
+      - name: Publish stable-named asset (para el landing)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            src=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/nsis" -name "*.exe" | head -1)
+            dest="FocusGuard-Windows-x64-setup.exe"
+          else
+            src=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/dmg" -name "*.dmg" | head -1)
+            dest="FocusGuard-macOS-arm64.dmg"
+          fi
+          cp "$src" "$dest"
+          gh release upload "${{ github.ref_name }}" "$dest" --clobber --repo "${{ github.repository }}"
