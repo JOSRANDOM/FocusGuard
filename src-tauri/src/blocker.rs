@@ -166,17 +166,34 @@ fn write_hosts(content: String) -> Result<(), String> {
     std::fs::write(&temp_path, &content)
         .map_err(|e| format!("No se pudo escribir temporal: {}", e))?;
 
+    // Se usa un script .ps1 temporal en vez de anidar el Copy-Item dentro de
+    // -ArgumentList como un solo string: en PowerShell una comilla simple se
+    // escapa duplicándola (''), no con \' — el string se cerraba antes de
+    // tiempo y Start-Process recibía el comando partido en varios argumentos
+    // posicionales sueltos (el error "PositionalParameterNotFound").
+    let script_path = std::env::temp_dir().join("focusguard_apply_hosts.ps1");
+    let script_content = format!(
+        "Copy-Item -LiteralPath '{}' -Destination '{}' -Force",
+        temp_path.display().to_string().replace('\'', "''"),
+        hosts_path.replace('\'', "''"),
+    );
+    std::fs::write(&script_path, &script_content)
+        .map_err(|e| format!("No se pudo escribir script temporal: {}", e))?;
+
+    // -ArgumentList como lista separada por comas: cada elemento llega como
+    // un argumento propio al proceso elevado, sin depender de que el shell
+    // interno vuelva a partir un string plano.
     let ps_cmd = format!(
-        "Start-Process powershell -Verb RunAs -Wait -ArgumentList \
-        '-Command Copy-Item \\'{}\\' \\'{}\\' -Force'",
-        temp_path.display(),
-        hosts_path
+        "Start-Process powershell -Verb RunAs -Wait -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','{}'",
+        script_path.display().to_string().replace('\'', "''"),
     );
 
     let output = std::process::Command::new("powershell")
-        .args(["-ExecutionPolicy", "Bypass", "-Command", &ps_cmd])
+        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &ps_cmd])
         .output()
         .map_err(|e| format!("PowerShell falló: {}", e))?;
+
+    let _ = std::fs::remove_file(&script_path);
 
     if !output.status.success() {
         return Err(String::from_utf8_lossy(&output.stderr).to_string());
