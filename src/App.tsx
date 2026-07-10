@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import PlatformCard, { Platform } from "./components/PlatformCard";
 import GlobalSchedule from "./components/GlobalSchedule";
+import SecuritySettings from "./components/SecuritySettings";
 import PrivateRelayBanner from "./components/PrivateRelayBanner";
 import SetupBanner from "./components/SetupBanner";
 import "./App.css";
 
-type Tab = "general" | "individual";
+type Tab = "general" | "individual" | "security";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("general");
@@ -16,6 +17,7 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [privateRelayOn, setPrivateRelayOn] = useState(false);
   const [helperInstalled, setHelperInstalled] = useState(true);
+  const [securityEnabled, setSecurityEnabled] = useState(false);
 
   async function loadPlatforms() {
     try {
@@ -46,10 +48,20 @@ export default function App() {
     }
   }
 
+  async function checkSecurity() {
+    try {
+      const enabled = await invoke<boolean>("get_security_status");
+      setSecurityEnabled(enabled);
+    } catch {
+      setSecurityEnabled(false);
+    }
+  }
+
   useEffect(() => {
     loadPlatforms();
     checkRelay();
     checkHelper();
+    checkSecurity();
     const interval = setInterval(() => {
       loadPlatforms();
       checkRelay();
@@ -116,6 +128,12 @@ export default function App() {
         >
           🔒 Bloqueo individual
         </button>
+        <button
+          className={`tab-btn ${tab === "security" ? "tab-active" : ""}`}
+          onClick={() => setTab("security")}
+        >
+          🔐 Seguridad
+        </button>
       </div>
 
       <main className="app-main">
@@ -123,6 +141,8 @@ export default function App() {
           <div className="loading">Cargando…</div>
         ) : tab === "general" ? (
           <GlobalSchedule />
+        ) : tab === "security" ? (
+          <SecuritySettings onStatusChange={setSecurityEnabled} />
         ) : (
           <>
             <div className="stats-bar">
@@ -135,7 +155,12 @@ export default function App() {
             </div>
             <div className="platform-grid">
               {platforms.map((p) => (
-                <PlatformCard key={p.id} platform={p} onUpdate={loadPlatforms} />
+                <PlatformCard
+                  key={p.id}
+                  platform={p}
+                  securityEnabled={securityEnabled}
+                  onUpdate={loadPlatforms}
+                />
               ))}
             </div>
           </>

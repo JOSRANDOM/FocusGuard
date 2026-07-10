@@ -1,4 +1,4 @@
-use rusqlite::{params, Connection, Result};
+use rusqlite::{params, Connection, OptionalExtension, Result};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -76,6 +76,12 @@ pub fn init_db() -> Result<Connection> {
             start_time TEXT    NOT NULL,
             end_time   TEXT    NOT NULL,
             platforms  TEXT    NOT NULL DEFAULT '[]'
+        );
+
+        CREATE TABLE IF NOT EXISTS security_settings (
+            id            INTEGER PRIMARY KEY CHECK (id = 1),
+            password_hash TEXT NOT NULL,
+            salt          TEXT NOT NULL
         );",
     )?;
 
@@ -241,5 +247,31 @@ pub fn add_global_schedule(conn: &Connection, s: &NewGlobalSchedule) -> Result<i
 
 pub fn delete_global_schedule(conn: &Connection, id: i64) -> Result<()> {
     conn.execute("DELETE FROM global_schedules WHERE id = ?1", params![id])?;
+    Ok(())
+}
+
+// ─── Seguridad ──────────────────────────────────────────────────────────────
+
+/// Retorna (password_hash, salt) si hay una contraseña configurada.
+pub fn get_password_hash(conn: &Connection) -> Result<Option<(String, String)>> {
+    conn.query_row(
+        "SELECT password_hash, salt FROM security_settings WHERE id = 1",
+        [],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )
+    .optional()
+}
+
+pub fn set_password(conn: &Connection, hash: &str, salt: &str) -> Result<()> {
+    conn.execute(
+        "INSERT INTO security_settings (id, password_hash, salt) VALUES (1, ?1, ?2)
+         ON CONFLICT(id) DO UPDATE SET password_hash = ?1, salt = ?2",
+        params![hash, salt],
+    )?;
+    Ok(())
+}
+
+pub fn clear_password(conn: &Connection) -> Result<()> {
+    conn.execute("DELETE FROM security_settings WHERE id = 1", [])?;
     Ok(())
 }

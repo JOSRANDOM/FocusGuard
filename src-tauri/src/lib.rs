@@ -9,6 +9,7 @@ use tauri_plugin_notification::NotificationExt;
 mod blocker;
 mod db;
 mod scheduler;
+mod security;
 
 pub use db::{GlobalSchedule, NewGlobalSchedule, NewSchedule, Platform, Schedule};
 
@@ -45,9 +46,15 @@ fn get_platforms(state: State<AppState>) -> Result<Vec<Platform>, String> {
 }
 
 #[tauri::command]
-fn toggle_platform(id: i64, enabled: bool, state: State<AppState>) -> Result<(), String> {
+fn toggle_platform(
+    id: i64,
+    enabled: bool,
+    password: Option<String>,
+    state: State<AppState>,
+) -> Result<(), String> {
     {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
+        require_password(&conn, password)?;
         db::toggle_platform(&conn, id, enabled).map_err(|e| e.to_string())?;
     }
     refresh_blocks(&state)
@@ -124,6 +131,71 @@ fn delete_global_schedule(id: i64, state: State<AppState>) -> Result<(), String>
         db::delete_global_schedule(&conn, id).map_err(|e| e.to_string())?;
     }
     refresh_blocks(&state)
+}
+
+// ─── Seguridad ────────────────────────────────────────────────────────────────
+
+/// Si hay contraseña configurada, exige que `password` la coincida.
+/// Sin contraseña configurada, no bloquea nada (feature opt-in).
+fn require_password(conn: &rusqlite::Connection, password: Option<String>) -> Result<(), String> {
+    if let Some((hash, salt)) = db::get_password_hash(conn).map_err(|e| e.to_string())? {
+        let provided = password.ok_or_else(|| "Se requiere contraseña.".to_string())?;
+        if !security::verify(&provided, &hash, &salt) {
+            return Err("Contraseña incorrecta.".to_string());
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn get_security_status(state: State<AppState>) -> Result<bool, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    Ok(db::get_password_hash(&conn)
+        .map_err(|e| e.to_string())?
+        .is_some())
+}
+
+#[tauri::command]
+fn verify_security_password(password: String, state: State<AppState>) -> Result<bool, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    match db::get_password_hash(&conn).map_err(|e| e.to_string())? {
+        Some((hash, salt)) => Ok(security::verify(&password, &hash, &salt)),
+        None => Ok(true),
+    }
+}
+
+#[tauri::command]
+fn set_security_password(
+    new_password: String,
+    current_password: Option<String>,
+    state: State<AppState>,
+) -> Result<(), String> {
+    if new_password.trim().is_empty() {
+        return Err("La contraseña no puede estar vacía.".to_string());
+    }
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    if let Some((hash, salt)) = db::get_password_hash(&conn).map_err(|e| e.to_string())? {
+        let provided = current_password.ok_or_else(|| "Debes ingresar la contraseña actual.".to_string())?;
+        if !security::verify(&provided, &hash, &salt) {
+            return Err("Contraseña actual incorrecta.".to_string());
+        }
+    }
+    let salt = security::generate_salt();
+    let hash = security::hash_password(&new_password, &salt);
+    db::set_password(&conn, &hash, &salt).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn remove_security_password(current_password: String, state: State<AppState>) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    if let Some((hash, salt)) = db::get_password_hash(&conn).map_err(|e| e.to_string())? {
+        if !security::verify(&current_password, &hash, &salt) {
+            return Err("Contraseña incorrecta.".to_string());
+        }
+        db::clear_password(&conn).map_err(|e| e.to_string())
+    } else {
+        Ok(())
+    }
 }
 
 // ─── Aplicar bloqueos ─────────────────────────────────────────────────────────
@@ -307,6 +379,10 @@ pub fn run() {
             check_private_relay,
             check_helper_installed,
             install_helper,
+            get_security_status,
+            verify_security_password,
+            set_security_password,
+            remove_security_password,
         ])
         .setup(|app| {
             // En Windows esto es prácticamente un no-op; en macOS dispara el

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import ScheduleModal from "./ScheduleModal";
+import PasswordPromptModal from "./PasswordPromptModal";
 
 export interface Platform {
   id: number;
@@ -20,6 +21,7 @@ export interface Schedule {
 
 interface Props {
   platform: Platform;
+  securityEnabled: boolean;
   onUpdate: () => void;
 }
 
@@ -32,25 +34,35 @@ const PLATFORM_META: Record<string, { icon: string; color: string }> = {
 
 const DAY_NAMES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
-export default function PlatformCard({ platform, onUpdate }: Props) {
+export default function PlatformCard({ platform, securityEnabled, onUpdate }: Props) {
   const [showModal, setShowModal] = useState(false);
+  const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [loading, setLoading] = useState(false);
 
   const meta = PLATFORM_META[platform.name] ?? { icon: "🌐", color: "#888" };
 
-  async function handleToggle() {
+  async function doToggle(password?: string) {
     setLoading(true);
     try {
       await invoke("toggle_platform", {
         id: platform.id,
         enabled: !platform.enabled,
+        password: password ?? null,
       });
       onUpdate();
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
+    }
+  }
+
+  function handleToggle() {
+    if (securityEnabled) {
+      setShowPasswordPrompt(true);
+    } else {
+      doToggle();
     }
   }
 
@@ -119,6 +131,18 @@ export default function PlatformCard({ platform, onUpdate }: Props) {
             });
             setSchedules(data);
             onUpdate();
+          }}
+        />
+      )}
+
+      {showPasswordPrompt && (
+        <PasswordPromptModal
+          title={platform.enabled ? "Desactivar bloqueo" : "Activar bloqueo"}
+          message={`Ingresa la contraseña para ${platform.enabled ? "desactivar" : "activar"} el bloqueo de ${platform.name}.`}
+          onCancel={() => setShowPasswordPrompt(false)}
+          onConfirm={(password) => {
+            setShowPasswordPrompt(false);
+            doToggle(password);
           }}
         />
       )}
