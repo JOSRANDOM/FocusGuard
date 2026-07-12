@@ -108,6 +108,10 @@ fn build_hosts_content(domains_to_block: &[String]) -> Result<String, String> {
         result.push_str(&format!("\n\n{}\n", BEGIN_MARKER));
         for domain in domains_to_block {
             result.push_str(&format!("0.0.0.0 {}\n", domain));
+            // Sin esto, un dominio con registro AAAA (ej. youtube.com) se
+            // sigue resolviendo por IPv6 en redes con esa conectividad,
+            // saltándose por completo el bloqueo IPv4 de arriba.
+            result.push_str(&format!("::1 {}\n", domain));
         }
         result.push_str(&format!("{}\n", END_MARKER));
     } else {

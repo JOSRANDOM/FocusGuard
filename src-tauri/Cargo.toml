@@ -1,6 +1,6 @@
 [package]
 name = "focusguard"
-version = "1.3.2"
+version = "1.3.3"
 description = "FocusGuard - Block distracting websites on a schedule"
 authors = ["JOSRANDOM"]
 edition = "2021"
