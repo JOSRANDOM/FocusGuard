@@ -153,7 +153,41 @@ fn delete_global_schedule(
     {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         require_password(&conn, password)?;
+
+        // Plataformas que cubría el horario antes de borrarlo, para poder
+        // desactivarlas después si nada más las cubre.
+        let existing = db::get_global_schedules(&conn).map_err(|e| e.to_string())?;
+        let covered_ids: Vec<i64> = match existing.iter().find(|s| s.id == id) {
+            Some(s) if s.platforms.is_empty() => db::get_platforms(&conn)
+                .map_err(|e| e.to_string())?
+                .iter()
+                .map(|p| p.id)
+                .collect(),
+            Some(s) => s.platforms.clone(),
+            None => Vec::new(),
+        };
+
         db::delete_global_schedule(&conn, id).map_err(|e| e.to_string())?;
+
+        // Desactiva las plataformas que se activaron automáticamente con este
+        // horario y que ya no quedan cubiertas por ningún otro: si no, el
+        // toggle seguía en "activado" sin horarios → bloqueado 24/7 en vez de
+        // quedar libre. Si la plataforma tiene sus propios horarios
+        // individuales, se respeta esa configuración y no se toca.
+        let remaining = db::get_global_schedules(&conn).map_err(|e| e.to_string())?;
+        for platform_id in covered_ids {
+            let still_covered = remaining
+                .iter()
+                .any(|gs| gs.platforms.is_empty() || gs.platforms.contains(&platform_id));
+            if still_covered {
+                continue;
+            }
+            let individual_schedules =
+                db::get_schedules(&conn, platform_id).map_err(|e| e.to_string())?;
+            if individual_schedules.is_empty() {
+                db::toggle_platform(&conn, platform_id, false).map_err(|e| e.to_string())?;
+            }
+        }
     }
     refresh_blocks(&state)
 }

@@ -211,6 +211,11 @@ fn write_hosts(content: String) -> Result<(), String> {
         return Err(String::from_utf8_lossy(&output.stderr).to_string());
     }
 
+    // Sin esto, un dominio ya resuelto por Windows antes de tocar el hosts
+    // sigue sirviéndose desde la caché DNS (real, no bloqueada) hasta que
+    // expira, aunque el hosts ya lo mapee a 0.0.0.0. No requiere elevación.
+    let _ = std::process::Command::new("ipconfig").arg("/flushdns").output();
+
     Ok(())
 }
 
