@@ -22,3 +22,9 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 chrono = { version = "0.4", features = ["serde"] }
 sha2 = "0.10"
 rand = "0.8"
+
+# El auto-updater solo está activo en Windows: en macOS la app no está
+# firmada/notarizada y un update no verificado por Gatekeeper no instalaría.
+[target.'cfg(target_os = "windows")'.dependencies]
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"

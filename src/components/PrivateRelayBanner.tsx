@@ -45,10 +45,7 @@ export default function PrivateRelayBanner() {
             Confirma haciendo clic en <strong>"Desactivar"</strong> en el
             diálogo que aparece
           </li>
-          <li>
-            Vuelve a FocusGuard y haz clic en{" "}
-            <strong>⚡ Aplicar ahora</strong> para activar los bloqueos
-          </li>
+          <li>Vuelve a FocusGuard: los bloqueos se aplicarán automáticamente</li>
         </ol>
       )}
     </div>

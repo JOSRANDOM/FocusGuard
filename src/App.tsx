@@ -5,6 +5,7 @@ import GlobalSchedule from "./components/GlobalSchedule";
 import SecuritySettings from "./components/SecuritySettings";
 import PrivateRelayBanner from "./components/PrivateRelayBanner";
 import SetupBanner from "./components/SetupBanner";
+import UpdateBanner from "./components/UpdateBanner";
 import "./App.css";
 
 type Tab = "general" | "individual" | "security";
@@ -13,8 +14,6 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("general");
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [loading, setLoading] = useState(true);
-  const [applyingAll, setApplyingAll] = useState(false);
-  const [message, setMessage] = useState("");
   const [privateRelayOn, setPrivateRelayOn] = useState(false);
   const [helperInstalled, setHelperInstalled] = useState(true);
   const [securityEnabled, setSecurityEnabled] = useState(false);
@@ -69,25 +68,6 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  async function handleApplyNow() {
-    setApplyingAll(true);
-    setMessage("");
-    try {
-      const blocked = await invoke<string[]>("apply_blocks_now");
-      setMessage(
-        blocked.length === 0
-          ? "Sin bloqueos activos ahora."
-          : `Bloqueando: ${blocked.join(", ")}`
-      );
-      await loadPlatforms();
-    } catch (e) {
-      setMessage(`Error: ${String(e)}`);
-    } finally {
-      setApplyingAll(false);
-      setTimeout(() => setMessage(""), 4000);
-    }
-  }
-
   const activeCount = platforms.filter((p) => p.enabled).length;
 
   return (
@@ -100,18 +80,9 @@ export default function App() {
             <p className="header-sub">Control de acceso a redes sociales</p>
           </div>
         </div>
-        <div className="header-actions">
-          {message && <span className="header-message">{message}</span>}
-          <button
-            className="btn-apply"
-            onClick={handleApplyNow}
-            disabled={applyingAll}
-          >
-            {applyingAll ? "Aplicando…" : "⚡ Aplicar ahora"}
-          </button>
-        </div>
       </header>
 
+      <UpdateBanner />
       {!helperInstalled && <SetupBanner onDone={() => setHelperInstalled(true)} />}
       {privateRelayOn && <PrivateRelayBanner />}
 

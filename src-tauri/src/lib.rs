@@ -327,6 +327,13 @@ fn check_helper_installed() -> bool {
     blocker::is_helper_installed()
 }
 
+// ─── Auto-update (solo Windows) ───────────────────────────────────────────────
+
+#[tauri::command]
+fn is_windows() -> bool {
+    cfg!(target_os = "windows")
+}
+
 #[tauri::command]
 fn install_helper() -> Result<(), String> {
     blocker::install_helper()
@@ -362,9 +369,19 @@ pub fn run() {
         tray: Mutex::new(None),
     };
 
-    tauri::Builder::default()
+    #[allow(unused_mut)]
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_notification::init());
+
+    #[cfg(target_os = "windows")]
+    {
+        builder = builder
+            .plugin(tauri_plugin_updater::Builder::new().build())
+            .plugin(tauri_plugin_process::init());
+    }
+
+    builder
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             get_platforms,
@@ -379,6 +396,7 @@ pub fn run() {
             check_private_relay,
             check_helper_installed,
             install_helper,
+            is_windows,
             get_security_status,
             verify_security_password,
             set_security_password,
