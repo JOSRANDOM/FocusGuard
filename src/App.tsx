@@ -69,6 +69,7 @@ export default function App() {
   }, []);
 
   const activeCount = platforms.filter((p) => p.enabled).length;
+  const requirePasswordSetup = () => setTab("security");
 
   return (
     <div className="app">
@@ -111,7 +112,10 @@ export default function App() {
         {loading ? (
           <div className="loading">Cargando…</div>
         ) : tab === "general" ? (
-          <GlobalSchedule />
+          <GlobalSchedule
+            securityEnabled={securityEnabled}
+            onRequirePasswordSetup={requirePasswordSetup}
+          />
         ) : tab === "security" ? (
           <SecuritySettings onStatusChange={setSecurityEnabled} />
         ) : (
@@ -131,6 +135,7 @@ export default function App() {
                   platform={p}
                   securityEnabled={securityEnabled}
                   onUpdate={loadPlatforms}
+                  onRequirePasswordSetup={requirePasswordSetup}
                 />
               ))}
             </div>

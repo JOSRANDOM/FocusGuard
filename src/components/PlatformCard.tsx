@@ -23,6 +23,7 @@ interface Props {
   platform: Platform;
   securityEnabled: boolean;
   onUpdate: () => void;
+  onRequirePasswordSetup: () => void;
 }
 
 const PLATFORM_META: Record<string, { icon: string; color: string }> = {
@@ -34,7 +35,7 @@ const PLATFORM_META: Record<string, { icon: string; color: string }> = {
 
 const DAY_NAMES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
-export default function PlatformCard({ platform, securityEnabled, onUpdate }: Props) {
+export default function PlatformCard({ platform, securityEnabled, onUpdate, onRequirePasswordSetup }: Props) {
   const [showModal, setShowModal] = useState(false);
   const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
@@ -59,6 +60,13 @@ export default function PlatformCard({ platform, securityEnabled, onUpdate }: Pr
   }
 
   function handleToggle() {
+    const activating = !platform.enabled;
+    if (activating && !securityEnabled) {
+      // No tiene sentido activar un bloqueo que cualquiera puede desactivar
+      // sin fricción: primero hay que configurar una contraseña.
+      onRequirePasswordSetup();
+      return;
+    }
     if (securityEnabled) {
       setShowPasswordPrompt(true);
     } else {

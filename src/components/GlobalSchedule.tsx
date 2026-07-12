@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import PasswordPromptModal from "./PasswordPromptModal";
 
 interface GlobalSchedule {
   id: number;
@@ -38,7 +39,14 @@ function formatPlatforms(platformIds: number[], all: Platform[]): string {
     .join(", ");
 }
 
-export default function GlobalSchedule() {
+interface Props {
+  securityEnabled: boolean;
+  onRequirePasswordSetup: () => void;
+}
+
+type PendingAction = { type: "add" } | { type: "delete"; id: number };
+
+export default function GlobalSchedule({ securityEnabled, onRequirePasswordSetup }: Props) {
   const [schedules, setSchedules] = useState<GlobalSchedule[]>([]);
   const [allPlatforms, setAllPlatforms] = useState<Platform[]>([]);
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
@@ -48,6 +56,7 @@ export default function GlobalSchedule() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [isActive, setIsActive] = useState(false);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
 
   async function load() {
     const [data, platforms] = await Promise.all([
@@ -87,9 +96,16 @@ export default function GlobalSchedule() {
     }
   }
 
-  async function handleAdd() {
+  function requestAdd() {
     if (selectedDays.length === 0) { setError("Selecciona al menos un día."); return; }
     setError("");
+    // El horario masivo activa bloqueos automáticamente, así que siempre
+    // exige contraseña: si no hay una configurada, primero hay que crearla.
+    if (!securityEnabled) { onRequirePasswordSetup(); return; }
+    setPendingAction({ type: "add" });
+  }
+
+  async function doAdd(password: string) {
     setSaving(true);
     try {
       await invoke("add_global_schedule", {
@@ -100,6 +116,7 @@ export default function GlobalSchedule() {
           // vacío = todas las plataformas activas
           platforms: selectedPlatforms.length === allPlatforms.length ? [] : selectedPlatforms,
         },
+        password,
       });
       setSelectedDays([]);
       setSelectedPlatforms([]);
@@ -111,8 +128,13 @@ export default function GlobalSchedule() {
     }
   }
 
-  async function handleDelete(id: number) {
-    await invoke("delete_global_schedule", { id });
+  function requestDelete(id: number) {
+    if (!securityEnabled) { onRequirePasswordSetup(); return; }
+    setPendingAction({ type: "delete", id });
+  }
+
+  async function doDelete(id: number, password: string) {
+    await invoke("delete_global_schedule", { id, password });
     await load();
   }
 
@@ -151,7 +173,7 @@ export default function GlobalSchedule() {
                 </span>
               </div>
               <span className="global-item-time">{s.start_time} – {s.end_time}</span>
-              <button className="btn-delete" onClick={() => handleDelete(s.id)} title="Eliminar">🗑</button>
+              <button className="btn-delete" onClick={() => requestDelete(s.id)} title="Eliminar">🗑</button>
             </li>
           ))}
         </ul>
@@ -251,12 +273,33 @@ export default function GlobalSchedule() {
 
         <button
           className="btn-global-add"
-          onClick={handleAdd}
+          onClick={requestAdd}
           disabled={saving || selectedDays.length === 0}
         >
           {saving ? "Guardando…" : "Agregar horario"}
         </button>
       </div>
+
+      {pendingAction && (
+        <PasswordPromptModal
+          title={pendingAction.type === "add" ? "Agregar horario" : "Eliminar horario"}
+          message={
+            pendingAction.type === "add"
+              ? "Ingresa la contraseña para agregar este horario y activar el bloqueo."
+              : "Ingresa la contraseña para eliminar este horario."
+          }
+          onCancel={() => setPendingAction(null)}
+          onConfirm={(password) => {
+            const action = pendingAction;
+            setPendingAction(null);
+            if (action.type === "add") {
+              doAdd(password);
+            } else {
+              doDelete(action.id, password);
+            }
+          }}
+        />
+      )}
     </section>
   );
 }

@@ -102,6 +102,7 @@ fn get_global_schedules(state: State<AppState>) -> Result<Vec<GlobalSchedule>, S
 #[tauri::command]
 fn add_global_schedule(
     schedule: NewGlobalSchedule,
+    password: Option<String>,
     state: State<AppState>,
 ) -> Result<GlobalSchedule, String> {
     if schedule.days.is_empty() {
@@ -112,7 +113,26 @@ fn add_global_schedule(
     }
     let id = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
-        db::add_global_schedule(&conn, &schedule).map_err(|e| e.to_string())?
+        require_password(&conn, password)?;
+        let id = db::add_global_schedule(&conn, &schedule).map_err(|e| e.to_string())?;
+
+        // Activa automáticamente las plataformas cubiertas por este horario:
+        // sin esto, el horario masivo quedaba guardado pero no bloqueaba nada
+        // hasta que el usuario fuera a activar cada plataforma a mano.
+        let target_ids: Vec<i64> = if schedule.platforms.is_empty() {
+            db::get_platforms(&conn)
+                .map_err(|e| e.to_string())?
+                .iter()
+                .map(|p| p.id)
+                .collect()
+        } else {
+            schedule.platforms.clone()
+        };
+        for platform_id in target_ids {
+            db::toggle_platform(&conn, platform_id, true).map_err(|e| e.to_string())?;
+        }
+
+        id
     };
     refresh_blocks(&state)?;
     Ok(GlobalSchedule {
@@ -125,9 +145,14 @@ fn add_global_schedule(
 }
 
 #[tauri::command]
-fn delete_global_schedule(id: i64, state: State<AppState>) -> Result<(), String> {
+fn delete_global_schedule(
+    id: i64,
+    password: Option<String>,
+    state: State<AppState>,
+) -> Result<(), String> {
     {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
+        require_password(&conn, password)?;
         db::delete_global_schedule(&conn, id).map_err(|e| e.to_string())?;
     }
     refresh_blocks(&state)
