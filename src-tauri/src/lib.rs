@@ -29,17 +29,11 @@ fn get_platforms(state: State<AppState>) -> Result<Vec<Platform>, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     let mut platforms = db::get_platforms(&conn).map_err(|e| e.to_string())?;
     let global = db::get_global_schedules(&conn).map_err(|e| e.to_string())?;
-    let globally_blocked = scheduler::is_globally_blocked(&global);
 
     for p in &mut platforms {
-        if p.enabled {
-            if globally_blocked {
-                p.currently_blocked = true;
-            } else {
-                let schedules = db::get_schedules(&conn, p.id).map_err(|e| e.to_string())?;
-                p.currently_blocked = scheduler::should_block(&schedules);
-            }
-        }
+        let schedules = db::get_schedules(&conn, p.id).map_err(|e| e.to_string())?;
+        p.currently_blocked =
+            scheduler::is_platform_blocked(p.id, p.enabled, &schedules, &global);
     }
 
     Ok(platforms)
@@ -114,25 +108,7 @@ fn add_global_schedule(
     let id = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         require_password(&conn, password)?;
-        let id = db::add_global_schedule(&conn, &schedule).map_err(|e| e.to_string())?;
-
-        // Activa automáticamente las plataformas cubiertas por este horario:
-        // sin esto, el horario masivo quedaba guardado pero no bloqueaba nada
-        // hasta que el usuario fuera a activar cada plataforma a mano.
-        let target_ids: Vec<i64> = if schedule.platforms.is_empty() {
-            db::get_platforms(&conn)
-                .map_err(|e| e.to_string())?
-                .iter()
-                .map(|p| p.id)
-                .collect()
-        } else {
-            schedule.platforms.clone()
-        };
-        for platform_id in target_ids {
-            db::toggle_platform(&conn, platform_id, true).map_err(|e| e.to_string())?;
-        }
-
-        id
+        db::add_global_schedule(&conn, &schedule).map_err(|e| e.to_string())?
     };
     refresh_blocks(&state)?;
     Ok(GlobalSchedule {
@@ -153,41 +129,7 @@ fn delete_global_schedule(
     {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         require_password(&conn, password)?;
-
-        // Plataformas que cubría el horario antes de borrarlo, para poder
-        // desactivarlas después si nada más las cubre.
-        let existing = db::get_global_schedules(&conn).map_err(|e| e.to_string())?;
-        let covered_ids: Vec<i64> = match existing.iter().find(|s| s.id == id) {
-            Some(s) if s.platforms.is_empty() => db::get_platforms(&conn)
-                .map_err(|e| e.to_string())?
-                .iter()
-                .map(|p| p.id)
-                .collect(),
-            Some(s) => s.platforms.clone(),
-            None => Vec::new(),
-        };
-
         db::delete_global_schedule(&conn, id).map_err(|e| e.to_string())?;
-
-        // Desactiva las plataformas que se activaron automáticamente con este
-        // horario y que ya no quedan cubiertas por ningún otro: si no, el
-        // toggle seguía en "activado" sin horarios → bloqueado 24/7 en vez de
-        // quedar libre. Si la plataforma tiene sus propios horarios
-        // individuales, se respeta esa configuración y no se toca.
-        let remaining = db::get_global_schedules(&conn).map_err(|e| e.to_string())?;
-        for platform_id in covered_ids {
-            let still_covered = remaining
-                .iter()
-                .any(|gs| gs.platforms.is_empty() || gs.platforms.contains(&platform_id));
-            if still_covered {
-                continue;
-            }
-            let individual_schedules =
-                db::get_schedules(&conn, platform_id).map_err(|e| e.to_string())?;
-            if individual_schedules.is_empty() {
-                db::toggle_platform(&conn, platform_id, false).map_err(|e| e.to_string())?;
-            }
-        }
     }
     refresh_blocks(&state)
 }
@@ -265,20 +207,12 @@ fn apply_blocks_now(state: State<AppState>) -> Result<Vec<String>, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     let platforms = db::get_platforms(&conn).map_err(|e| e.to_string())?;
     let global = db::get_global_schedules(&conn).map_err(|e| e.to_string())?;
-    let globally_blocked = scheduler::is_globally_blocked(&global);
 
     let mut blocked = Vec::new();
     for p in &platforms {
-        if p.enabled {
-            let is_blocked = if globally_blocked {
-                true
-            } else {
-                let schedules = db::get_schedules(&conn, p.id).map_err(|e| e.to_string())?;
-                scheduler::should_block(&schedules)
-            };
-            if is_blocked {
-                blocked.push(p.name.clone());
-            }
+        let schedules = db::get_schedules(&conn, p.id).map_err(|e| e.to_string())?;
+        if scheduler::is_platform_blocked(p.id, p.enabled, &schedules, &global) {
+            blocked.push(p.name.clone());
         }
     }
     Ok(blocked)
@@ -292,21 +226,12 @@ pub fn notify_new_blocks(app: &AppHandle, state: &State<AppState>) -> Result<(),
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     let platforms = db::get_platforms(&conn).map_err(|e| e.to_string())?;
     let global = db::get_global_schedules(&conn).map_err(|e| e.to_string())?;
-    let globally_blocked = scheduler::is_globally_blocked(&global);
 
     let mut currently_blocked_ids = HashSet::new();
 
     for p in &platforms {
-        if !p.enabled {
-            continue;
-        }
-        let is_blocked = if globally_blocked {
-            true
-        } else {
-            let schedules = db::get_schedules(&conn, p.id).map_err(|e| e.to_string())?;
-            scheduler::should_block(&schedules)
-        };
-        if is_blocked {
+        let schedules = db::get_schedules(&conn, p.id).map_err(|e| e.to_string())?;
+        if scheduler::is_platform_blocked(p.id, p.enabled, &schedules, &global) {
             currently_blocked_ids.insert(p.id);
         }
     }
@@ -346,24 +271,8 @@ pub fn refresh_blocks(state: &State<AppState>) -> Result<(), String> {
     let mut domains_to_block: Vec<String> = Vec::new();
 
     for p in &platforms {
-        if !p.enabled {
-            continue;
-        }
-
-        // ¿Algún horario global cubre esta plataforma ahora?
-        let blocked_by_global = global_schedules.iter().any(|gs| {
-            let covers_platform = gs.platforms.is_empty() || gs.platforms.contains(&p.id);
-            covers_platform && scheduler::is_globally_blocked(std::slice::from_ref(gs))
-        });
-
-        let is_blocked = if blocked_by_global {
-            true
-        } else {
-            let schedules = db::get_schedules(&conn, p.id).map_err(|e| e.to_string())?;
-            scheduler::should_block(&schedules)
-        };
-
-        if is_blocked {
+        let schedules = db::get_schedules(&conn, p.id).map_err(|e| e.to_string())?;
+        if scheduler::is_platform_blocked(p.id, p.enabled, &schedules, &global_schedules) {
             domains_to_block.extend(p.domains.clone());
         }
     }
@@ -493,6 +402,15 @@ pub fn run() {
                 let _ = tray.set_visible(false);
                 *app.state::<AppState>().tray.lock().unwrap() = Some(tray);
             }
+
+            // El scheduler espera 60s antes de su primer tick (ver
+            // run_scheduler), así que sin esto el hosts se queda con lo que
+            // haya quedado escrito la sesión anterior hasta un minuto
+            // después de abrir la app — justo el caso de un relanzamiento
+            // por auto-update, donde el usuario prueba el bloqueo de
+            // inmediato. Se aplica una vez al arrancar, ya con el estado
+            // (y el binario) actuales.
+            let _ = refresh_blocks(&app.state::<AppState>());
 
             let handle = app.handle().clone();
             scheduler::run_scheduler(handle);

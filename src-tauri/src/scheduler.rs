@@ -43,6 +43,32 @@ pub fn is_globally_blocked(global_schedules: &[db::GlobalSchedule]) -> bool {
     false
 }
 
+/// true si la plataforma debe estar bloqueada ahora mismo, combinando
+/// horarios globales e individuales.
+///
+/// Un horario global que cubre la plataforma manda siempre, sin importar el
+/// toggle de "Bloqueo individual": ese toggle solo controla el bloqueo por
+/// horarios individuales (o 24/7 si no tiene ninguno). Antes ambas rutas
+/// compartían el mismo `if !enabled { continue }`, lo que hacía que una
+/// plataforma activada automáticamente por un horario masivo (sin horarios
+/// individuales propios) quedara bloqueada 24/7 incluso fuera de la ventana
+/// del horario, porque `should_block(&[])` siempre es `true`.
+pub fn is_platform_blocked(
+    platform_id: i64,
+    platform_enabled: bool,
+    individual_schedules: &[db::Schedule],
+    global_schedules: &[db::GlobalSchedule],
+) -> bool {
+    let blocked_by_global = global_schedules.iter().any(|gs| {
+        (gs.platforms.is_empty() || gs.platforms.contains(&platform_id))
+            && is_globally_blocked(std::slice::from_ref(gs))
+    });
+    if blocked_by_global {
+        return true;
+    }
+    platform_enabled && should_block(individual_schedules)
+}
+
 pub fn run_scheduler(app: AppHandle) {
     std::thread::spawn(move || loop {
         std::thread::sleep(std::time::Duration::from_secs(60));
