@@ -14,9 +14,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            label: macOS Apple Silicon
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             label: Windows x64
@@ -62,14 +59,10 @@ jobs:
             ### Descargas
             | Plataforma | Archivo |
             |------------|---------|
-            | macOS Apple Silicon (M1/M2/M3) | `FocusGuard_*_aarch64.dmg` |
             | Windows 10/11 | `FocusGuard_*_x64-setup.exe` |
 
             ### Instalación
-            - **macOS**: Abre el `.dmg`, arrastra FocusGuard a Aplicaciones.
             - **Windows**: Ejecuta el `.exe` como administrador.
-
-            > La primera vez que ejecutes la app en macOS, ve a *Ajustes del Sistema → Privacidad y seguridad* si aparece un aviso de seguridad.
           releaseDraft: false
           prerelease: false
           args: --target ${{ matrix.target }}
@@ -80,12 +73,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            src=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/nsis" -name "*.exe" | head -1)
-            dest="FocusGuard-Windows-x64-setup.exe"
-          else
-            src=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/dmg" -name "*.dmg" | head -1)
-            dest="FocusGuard-macOS-arm64.dmg"
-          fi
+          src=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/nsis" -name "*.exe" | head -1)
+          dest="FocusGuard-Windows-x64-setup.exe"
           cp "$src" "$dest"
           gh release upload "${{ github.ref_name }}" "$dest" --clobber --repo "${{ github.repository }}"

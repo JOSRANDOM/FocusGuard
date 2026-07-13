@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>FocusGuard — Por qué el bloqueo a veces no funciona</title>
+<style>
+  @page { margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+    background: #0d0d0f;
+    color: #e4e4e7;
+    font-size: 13.5px;
+    line-height: 1.6;
+  }
+  .page { padding: 48px 56px; }
+  .cover {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    background: radial-gradient(circle at 30% 20%, #1e293b 0%, #0d0d0f 60%);
+  }
+  .cover .shield { font-size: 64px; margin-bottom: 24px; }
+  .cover h1 {
+    font-size: 34px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    color: #fff;
+    margin-bottom: 14px;
+    max-width: 640px;
+  }
+  .cover .accent { color: #60a5fa; }
+  .cover p.sub {
+    color: #94a3b8;
+    font-size: 15px;
+    max-width: 560px;
+  }
+  .cover .brandline {
+    margin-top: 60px;
+    color: #52525b;
+    font-size: 12px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  h2.section-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  h2.section-title .num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px; height: 28px;
+    background: #3b82f6;
+    color: #fff;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 800;
+    flex-shrink: 0;
+  }
+  p.section-sub { color: #94a3b8; margin-bottom: 22px; font-size: 13px; }
+
+  .callout {
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin: 18px 0;
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+  }
+  .callout.warn { background: #2d1a00; border: 1px solid #92400e; }
+  .callout.warn .icon { color: #fbbf24; }
+  .callout.info { background: #0f172a; border: 1px solid #1e40af; }
+  .callout.info .icon { color: #93c5fd; }
+  .callout.ok { background: #052e16; border: 1px solid #15803d; }
+  .callout.ok .icon { color: #86efac; }
+  .callout .icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+  .callout .body strong { display: block; margin-bottom: 4px; font-size: 13.5px; }
+  .callout.warn .body strong { color: #fbbf24; }
+  .callout.info .body strong { color: #93c5fd; }
+  .callout.ok .body strong { color: #86efac; }
+  .callout .body p { color: #cbd5e1; font-size: 12.5px; line-height: 1.55; }
+
+  .symptom-flow {
+    display: flex;
+    gap: 12px;
+    margin: 24px 0;
+  }
+  .symptom-step {
+    flex: 1;
+    background: #18181b;
+    border: 1px solid #2e2e33;
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+  }
+  .symptom-step .emoji { font-size: 28px; margin-bottom: 10px; }
+  .symptom-step .label { font-size: 12px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+  .symptom-step .desc { font-size: 11px; color: #94a3b8; line-height: 1.5; }
+  .symptom-arrow { display: flex; align-items: center; color: #3b82f6; font-size: 20px; }
+
+  .browser-card {
+    background: #18181b;
+    border: 1px solid #2e2e33;
+    border-radius: 14px;
+    padding: 24px 26px;
+    margin-bottom: 20px;
+    page-break-inside: avoid;
+  }
+  .browser-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid #2e2e33;
+  }
+  .browser-header .logo { font-size: 26px; }
+  .browser-header h3 { font-size: 16px; color: #fff; font-weight: 700; }
+  .browser-header .path {
+    margin-left: auto;
+    font-family: "Cascadia Code", Consolas, monospace;
+    font-size: 11px;
+    background: #0d0d0f;
+    color: #93c5fd;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid #2e2e33;
+  }
+
+  .steps { list-style: none; }
+  .steps li {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 14px;
+    align-items: flex-start;
+  }
+  .steps li .step-num {
+    width: 22px; height: 22px;
+    background: #27272a;
+    border: 1px solid #3f3f46;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: #a1a1aa;
+    flex-shrink: 0;
+  }
+  .steps li .step-text { font-size: 12.5px; color: #d4d4d8; padding-top: 2px; }
+  .steps li .step-text code {
+    background: #0d0d0f;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 11.5px;
+    color: #86efac;
+    border: 1px solid #2e2e33;
+  }
+
+  /* Illustrative toggle mockup */
+  .toggle-mock {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: #0d0d0f;
+    border: 1px solid #2e2e33;
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-top: 10px;
+  }
+  .toggle-mock .toggle-label { font-size: 12px; color: #e4e4e7; }
+  .toggle-track {
+    width: 38px; height: 20px;
+    background: #3f3f46;
+    border-radius: 20px;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .toggle-track .knob {
+    position: absolute;
+    width: 16px; height: 16px;
+    background: #a1a1aa;
+    border-radius: 50%;
+    top: 2px; left: 2px;
+  }
+  .toggle-mock .off-tag {
+    font-size: 10px;
+    font-weight: 800;
+    color: #f87171;
+    background: #450a0a;
+    padding: 2px 8px;
+    border-radius: 6px;
+    letter-spacing: .5px;
+  }
+
+  .footer-note {
+    margin-top: 28px;
+    padding-top: 18px;
+    border-top: 1px solid #2e2e33;
+    font-size: 11px;
+    color: #52525b;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<section class="cover page">
+  <div class="shield">🛡️</div>
+  <h1>Por qué un bloqueo <span class="accent">a veces no funciona</span> — y cómo arreglarlo</h1>
+  <p class="sub">Guía rápida para desactivar "DNS seguro" en tu navegador, el ajuste que puede
+  hacer que FocusGuard parezca fallar aunque esté funcionando correctamente.</p>
+  <div class="brandline">FocusGuard · Guía de usuario</div>
+</section>
+
+<!-- SECTION 1: EL SÍNTOMA -->
+<section class="page">
+  <h2 class="section-title"><span class="num">1</span>El síntoma</h2>
+  <p class="section-sub">Esto es exactamente lo que pasa cuando tu navegador usa DNS seguro.</p>
+
+  <div class="symptom-flow">
+    <div class="symptom-step">
+      <div class="emoji">🚫</div>
+      <div class="label">Bloqueas la app</div>
+      <div class="desc">Activas el switch de una plataforma (ej. YouTube) en FocusGuard.</div>
+    </div>
+    <div class="symptom-arrow">→</div>
+    <div class="symptom-step">
+      <div class="emoji">📡</div>
+      <div class="label">Error de conexión</div>
+      <div class="desc">Al entrar, ves "Conéctate a Internet" — el bloqueo funcionó.</div>
+    </div>
+    <div class="symptom-arrow">→</div>
+    <div class="symptom-step">
+      <div class="emoji">🔄</div>
+      <div class="label">Se recarga sola</div>
+      <div class="desc">A los pocos segundos, la página reintenta.</div>
+    </div>
+    <div class="symptom-arrow">→</div>
+    <div class="symptom-step">
+      <div class="emoji">▶️</div>
+      <div class="label">Carga normal</div>
+      <div class="desc">El sitio abre como si no hubiera bloqueo.</div>
+    </div>
+  </div>
+
+  <div class="callout info">
+    <span class="icon">ℹ️</span>
+    <div class="body">
+      <strong>No es un error de FocusGuard</strong>
+      <p>El archivo <code style="background:#0d0d0f;padding:1px 6px;border-radius:4px;color:#93c5fd;">hosts</code>
+      del sistema sigue bloqueado todo el tiempo — lo verificamos escribiéndolo y revisándolo varios segundos
+      después, sin cambios. Es el <strong>navegador</strong> el que decide ignorarlo.</p>
+    </div>
+  </div>
+
+  <h2 class="section-title" style="margin-top:32px;"><span class="num">2</span>La causa real</h2>
+  <p class="section-sub">"DNS seguro" (DNS-over-HTTPS) hace que el navegador le pregunte a un servidor
+  externo cómo resolver un dominio, en vez de preguntarle al sistema operativo — que es quien
+  respeta el archivo <code style="background:#0d0d0f;padding:1px 6px;border-radius:4px;color:#86efac;">hosts</code>
+  donde FocusGuard escribe los bloqueos.</p>
+
+  <div class="callout warn">
+    <span class="icon">⚠️</span>
+    <div class="body">
+      <strong>Le pasa a cualquier bloqueador basado en "hosts"</strong>
+      <p>Cold Turkey, Freedom y herramientas similares tienen la misma limitación. No hay forma de
+      arreglarlo solo desde la app — la solución vive en la configuración del navegador.</p>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 3: CHROME -->
+<section class="page">
+  <h2 class="section-title"><span class="num">3</span>Desactivar DNS seguro por navegador</h2>
+  <p class="section-sub">Sigue los pasos del navegador que uses. Toma menos de un minuto.</p>
+
+  <div class="browser-card">
+    <div class="browser-header">
+      <span class="logo">🌐</span>
+      <h3>Google Chrome</h3>
+      <span class="path">chrome://settings/security</span>
+    </div>
+    <ul class="steps">
+      <li><span class="step-num">1</span><span class="step-text">Abre el menú <code>⋮</code> → <strong>Configuración</strong> → <strong>Privacidad y seguridad</strong> → <strong>Seguridad</strong>.</span></li>
+      <li><span class="step-num">2</span><span class="step-text">Busca la sección <strong>"Usar DNS seguro"</strong>.</span></li>
+      <li><span class="step-num">3</span><span class="step-text">Desactiva el interruptor (o elige "Con tu proveedor de servicios actual" como alternativa más permisiva).</span></li>
+    </ul>
+    <div class="toggle-mock">
+      <span class="toggle-label">Usar DNS seguro</span>
+      <div class="toggle-track"><div class="knob"></div></div>
+      <span class="off-tag">OFF</span>
+    </div>
+  </div>
+
+  <div class="browser-card">
+    <div class="browser-header">
+      <span class="logo">🧭</span>
+      <h3>Microsoft Edge</h3>
+      <span class="path">edge://settings/privacy</span>
+    </div>
+    <ul class="steps">
+      <li><span class="step-num">1</span><span class="step-text">Ve a <strong>Configuración</strong> → <strong>Privacidad, búsqueda y servicios</strong>.</span></li>
+      <li><span class="step-num">2</span><span class="step-text">Baja hasta <strong>"Servicios de seguridad"</strong>.</span></li>
+      <li><span class="step-num">3</span><span class="step-text">Desactiva <strong>"Usar DNS seguro para especificar cómo se resuelven las búsquedas de DNS"</strong>.</span></li>
+    </ul>
+    <div class="toggle-mock">
+      <span class="toggle-label">Usar DNS seguro</span>
+      <div class="toggle-track"><div class="knob"></div></div>
+      <span class="off-tag">OFF</span>
+    </div>
+  </div>
+
+  <div class="browser-card">
+    <div class="browser-header">
+      <span class="logo">🦊</span>
+      <h3>Mozilla Firefox</h3>
+      <span class="path">about:preferences#general</span>
+    </div>
+    <ul class="steps">
+      <li><span class="step-num">1</span><span class="step-text">Baja hasta <strong>"Configuración de red"</strong> → botón <strong>"Configuración"</strong>.</span></li>
+      <li><span class="step-num">2</span><span class="step-text">Desmarca <strong>"Habilitar DNS mediante HTTPS"</strong> (o elige "Desactivado").</span></li>
+    </ul>
+    <div class="toggle-mock">
+      <span class="toggle-label">DNS mediante HTTPS</span>
+      <div class="toggle-track"><div class="knob"></div></div>
+      <span class="off-tag">OFF</span>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 4: OTROS -->
+<section class="page">
+  <h2 class="section-title"><span class="num">4</span>Otros casos</h2>
+
+  <div class="browser-card">
+    <div class="browser-header">
+      <span class="logo">🧭</span>
+      <h3>Brave, Opera y otros basados en Chromium</h3>
+    </div>
+    <p style="font-size:12.5px; color:#d4d4d8;">Misma opción, normalmente en
+    <strong>Configuración → Privacidad y seguridad → Seguridad → DNS seguro</strong> — los pasos
+    son equivalentes a los de Chrome.</p>
+  </div>
+
+  <div class="browser-card">
+    <div class="browser-header">
+      <span class="logo">🍎</span>
+      <h3>Safari (macOS)</h3>
+    </div>
+    <p style="font-size:12.5px; color:#d4d4d8;">Safari usa el resolutor de DNS del sistema por
+    defecto y normalmente <strong>no</strong> necesita este ajuste. Si el bloqueo no funciona ahí,
+    revisar en su lugar <code style="background:#0d0d0f;padding:1px 6px;border-radius:4px;color:#93c5fd;">Preferencias del Sistema → Red → DNS</code>
+    por si hay un servidor DNS-over-HTTPS configurado a nivel de sistema.</p>
+  </div>
+
+  <div class="callout ok" style="margin-top:24px;">
+    <span class="icon">✅</span>
+    <div class="body">
+      <strong>Después de desactivarlo</strong>
+      <p>Cierra por completo el navegador y ábrelo de nuevo. El bloqueo de FocusGuard debería
+      mantenerse estable, sin recargarse hacia el sitio real.</p>
+    </div>
+  </div>
+
+  <div class="footer-note">FocusGuard · Recupera tu enfoque · docs/dns-seguro.md</div>
+</section>
+
+</body>
+</html>

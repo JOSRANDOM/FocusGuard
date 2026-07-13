@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-  <title>FocusGuard | Recupera tu enfoque — macOS & Windows</title>
+  <title>FocusGuard | Recupera tu enfoque — Windows</title>
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Geist:wght@500;600;700;800&family=JetBrains+Mono:wght@500&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
@@ -258,16 +258,12 @@
       </p>
       <div class="flex flex-col items-center gap-stack-sm mb-stack-xl">
         <div class="flex flex-col sm:flex-row gap-stack-md">
-          <a id="btn-mac" class="hero-glow bg-primary text-on-primary-container px-8 py-4 rounded-full flex items-center gap-3 font-headline-md text-headline-md font-bold transition-all" href="https://github.com/JOSRANDOM/FocusGuard/releases/latest/download/FocusGuard-macOS-arm64.dmg">
-            <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">laptop_mac</span>
-            Descargar para macOS
-          </a>
-          <a id="btn-win" class="hero-glow bg-surface-container text-primary border border-primary/30 px-8 py-4 rounded-full flex items-center gap-3 font-headline-md text-headline-md font-bold transition-all" href="https://github.com/JOSRANDOM/FocusGuard/releases/latest/download/FocusGuard-Windows-x64-setup.exe">
+          <a id="btn-win" class="hero-glow bg-primary text-on-primary-container px-8 py-4 rounded-full flex items-center gap-3 font-headline-md text-headline-md font-bold transition-all" href="https://github.com/JOSRANDOM/FocusGuard/releases/latest/download/FocusGuard-Windows-x64-setup.exe">
             <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">desktop_windows</span>
             Descargar para Windows
           </a>
         </div>
-        <span id="os-hint" class="font-label-md text-label-md text-outline">macOS 12+ · Windows 10/11 · Sin cuenta necesaria · Gratis</span>
+        <span id="os-hint" class="font-label-md text-label-md text-outline">Windows 10/11 · Sin cuenta necesaria · Gratis</span>
       </div>
 
       <!-- App Mockup -->
@@ -411,13 +407,6 @@
           </div>
           <div class="space-y-stack-sm">
             <div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-              <span class="material-symbols-outlined text-primary text-[18px]">vpn_lock</span>
-            </div>
-            <h4 class="font-headline-md text-headline-md font-semibold">Detección de iCloud Relay</h4>
-            <p class="font-body-md text-body-md text-on-surface-variant">En macOS, FocusGuard te avisa si el Private Relay está activo y podría saltarse los bloqueos.</p>
-          </div>
-          <div class="space-y-stack-sm">
-            <div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
               <span class="material-symbols-outlined text-primary text-[18px]">lock</span>
             </div>
             <h4 class="font-headline-md text-headline-md font-semibold">Aplicación automática</h4>
@@ -509,16 +498,12 @@
         </p>
         <div class="flex flex-col items-center gap-stack-sm">
           <div class="flex flex-col sm:flex-row gap-stack-md">
-            <a class="hero-glow bg-primary text-on-primary-container px-8 py-4 rounded-full flex items-center gap-3 font-headline-md text-headline-md font-bold transition-all" href="https://github.com/JOSRANDOM/FocusGuard/releases/latest/download/FocusGuard-macOS-arm64.dmg">
-              <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">laptop_mac</span>
-              Descargar para macOS
-            </a>
-            <a class="hero-glow bg-surface-container text-primary border border-primary/30 px-8 py-4 rounded-full flex items-center gap-3 font-headline-md text-headline-md font-bold transition-all" href="https://github.com/JOSRANDOM/FocusGuard/releases/latest/download/FocusGuard-Windows-x64-setup.exe">
+            <a class="hero-glow bg-primary text-on-primary-container px-8 py-4 rounded-full flex items-center gap-3 font-headline-md text-headline-md font-bold transition-all" href="https://github.com/JOSRANDOM/FocusGuard/releases/latest/download/FocusGuard-Windows-x64-setup.exe">
               <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">desktop_windows</span>
               Descargar para Windows
             </a>
           </div>
-          <p class="font-label-md text-label-md text-outline">Código abierto · macOS 12+ · Windows 10/11 · Sin suscripción</p>
+          <p class="font-label-md text-label-md text-outline">Código abierto · Windows 10/11 · Sin suscripción</p>
         </div>
       </div>
     </section>
@@ -559,37 +544,6 @@
       </div>
     </div>
   </footer>
-
-  <script>
-    // Detección de OS y resalte del botón correcto
-    (function () {
-      // Intentar detectar OS con la API moderna, fallback a userAgent
-      const ua = navigator.userAgent || '';
-      const platform = (navigator.userAgentData?.platform || navigator.platform || '').toLowerCase();
-      const isMac = /mac/i.test(platform) || /macintosh|mac os x/i.test(ua);
-      const isWin = /win/i.test(platform) || /windows/i.test(ua);
-
-      const btnMac = document.getElementById('btn-mac');
-      const btnWin = document.getElementById('btn-win');
-      const hint   = document.getElementById('os-hint');
-
-      if (isMac && btnMac && btnWin) {
-        // Destacar macOS, atenuar Windows
-        btnMac.classList.remove('bg-surface-container', 'text-primary', 'border', 'border-primary/30');
-        btnMac.classList.add('bg-primary', 'text-on-primary-container');
-        btnWin.classList.remove('bg-primary', 'text-on-primary-container');
-        btnWin.classList.add('bg-surface-container', 'text-primary', 'border', 'border-primary/30', 'opacity-70');
-        if (hint) hint.textContent = '✓ Detectamos que usas macOS — haz clic en el botón de arriba para descargar';
-      } else if (isWin && btnMac && btnWin) {
-        // Destacar Windows, atenuar macOS
-        btnWin.classList.remove('bg-surface-container', 'text-primary', 'border', 'border-primary/30');
-        btnWin.classList.add('bg-primary', 'text-on-primary-container');
-        btnMac.classList.remove('bg-primary', 'text-on-primary-container');
-        btnMac.classList.add('bg-surface-container', 'text-primary', 'border', 'border-primary/30', 'opacity-70');
-        if (hint) hint.textContent = '✓ Detectamos que usas Windows — haz clic en el botón de arriba para descargar';
-      }
-    })();
-  </script>
 
   <script>
     // Smooth scroll for anchors
